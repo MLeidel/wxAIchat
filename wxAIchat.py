@@ -1,6 +1,7 @@
 #
-# wxAI.py
-# wxPython GUI with OpenAI API`
+# wxAIchat.py
+# wxPython GUI with OpenAI API in chat mode`
+# ML Aug 2025
 #
 import os
 import sys
@@ -12,7 +13,6 @@ import platform
 import subprocess
 from time import localtime, strftime
 from openai import OpenAI
-
 
 opts = [] # loading options from the options.ini file into a list
 opts = iniproc.read("options.ini",'openai',     # 0
