@@ -3,11 +3,13 @@
 # wxPython GUI with OpenAI API`
 #
 import os
+import sys
 import iniproc
 import markdown
 import webbrowser
 import wx
 import platform
+import subprocess
 from time import localtime, strftime
 from openai import OpenAI
 
@@ -18,16 +20,28 @@ opts = iniproc.read("options.ini",'openai',     # 0
                                    'fontsz1',   # 2
                                    'fontsz2',   # 3
                                    'role',      # 4
-                                   'log')       # 5
+                                   'log',       # 5
+                                   'editor',    # 6
+                                   'qheight',   # 7
+                                   'font1',     # 8
+                                   'font2')     # 9
 intro = f'''
-Welcome to wxAI (API)
+Welcome to wxAIchat
+    a simple editable GUI desktop GptChat (API) app
 
 Model: {opts[1]}
 role: {opts[4]}
 log: {opts[5]}
 font1: {opts[2]}
 font2: {opts[3]}
+editor: {opts[6]}
+qheight: {opts[7]}
 OpenAI Key: {opts[0]}
+
+A registered OpenAI API key is required
+and set as a system environment variable
+
+wxpython and openai modules also required
 '''
 
 class MyFrame(wx.Frame):
@@ -44,11 +58,12 @@ class MyFrame(wx.Frame):
         self.text1 = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
         sizer.Add(
             self.text1,
-            pos=(0, 0),          # Position at row 0, column 0
-            span=(1, 5),         # Span of 1 row and 2 columns
-            flag=wx.EXPAND       # Allow horizontal expansion
+            pos=(0, 0),              # Position at row 0, column 0
+            span=(1, 5),             # Span of 1 row and 2 columns
+            flag=wx.ALL | wx.EXPAND, # Allow horizontal expansion
+            border=5
         )
-        sizer.SetItemMinSize(self.text1, self.text1.GetSize().GetWidth(), 125)  # Set minimum height
+        sizer.SetItemMinSize(self.text1, self.text1.GetSize().GetWidth(), int(opts[7]))  # Height
         self.text1.Bind(wx.EVT_KEY_DOWN, self.on_key_down_hotkeys)
         self.text1.SetToolTip("Enter Prompt in this field")
         self.text1.SetFocus()
@@ -60,9 +75,10 @@ class MyFrame(wx.Frame):
         self.text2 = wx.TextCtrl(panel, style=wx.TE_MULTILINE)  # wx.TE_DONTWRAP
         sizer.Add(
             self.text2,
-            pos=(1, 0),          # Position at row 1, column 0
-            span=(1, 5),         # Span of 1 row and 2 columns
-            flag=wx.EXPAND       # Allow both horizontal and vertical expansion
+            pos=(1, 0),              # Position at row 1, column 0
+            span=(1, 5),             # Span of 1 row and 2 columns
+            flag=wx.ALL | wx.EXPAND, # Allow horizontal expansion
+            border=5
         )
         self.text2.Bind(wx.EVT_KEY_DOWN, self.on_key_down_hotkeys)
         self.text2.SetValue(intro)
@@ -170,24 +186,45 @@ class MyFrame(wx.Frame):
         # https://docs.wxpython.org/wx.FontInfo.html#wx-fontinfo
         # https://docs.wxpython.org/wx.FontFamily.enumeration.html#wx-fontfamily
         if platform.system() == "Windows":
-            custom_font1 = wx.Font( wx.FontInfo(int(opts[2])).Family(wx.FONTFAMILY_MODERN) )  # monospace
-            self.text1.SetFont(custom_font1)
-            font = wx.Font(
-                int(opts[3]),                # Font size
-                wx.FONTFAMILY_MODERN,   # Font family: MODERN is typically monospaced
-                wx.FONTSTYLE_NORMAL,    # Font style
-                wx.FONTWEIGHT_NORMAL,   # Font weight
-                False,                  # Underlined
-                "Consolas"              # Face name
+            custom_font1 = wx.Font(
+                        int(opts[2]),
+                        wx.FONTFAMILY_DEFAULT,
+                        wx.FONTSTYLE_NORMAL,
+                        wx.FONTWEIGHT_NORMAL,
+                        False,
+                        opts[8]
             )
-            # custom_font2 = wx.Font( wx.FontInfo(int(opts[3])).Family(wx.FONTFAMILY_MODERN) )
-            self.text2.SetFont(font)
-        else:
-            custom_font1 = wx.Font( wx.FontInfo(int(opts[2])).Family(wx.FONTFAMILY_MODERN) )  # monospace
             self.text1.SetFont(custom_font1)
-            custom_font2 = wx.Font( wx.FontInfo(int(opts[3])).Family(wx.FONTFAMILY_TELETYPE) )
-            self.text2.SetFont(custom_font2)
 
+            custom_font2 = wx.Font(
+                        int(opts[3]),           # Font size
+                        wx.FONTFAMILY_DEFAULT,  # Font family: MODERN is typically monospaced
+                        wx.FONTSTYLE_NORMAL,    # Font style
+                        wx.FONTWEIGHT_NORMAL,   # Font weight
+                        False,                  # Underlined
+                        opts[9]                 # Face name
+            )
+            self.text2.SetFont(custom_font2)
+        else:  # not Windows ...
+            custom_font1 = wx.Font(
+                        int(opts[2]),
+                        wx.FONTFAMILY_DEFAULT,
+                        wx.FONTSTYLE_NORMAL,
+                        wx.FONTWEIGHT_NORMAL,
+                        False,
+                        opts[8]
+            )
+            self.text1.SetFont(custom_font1)
+
+            custom_font2 = wx.Font(
+                        int(opts[3]),           # Font size
+                        wx.FONTFAMILY_DEFAULT,  # Font family: MODERN is typically monospaced
+                        wx.FONTSTYLE_NORMAL,    # Font style
+                        wx.FONTWEIGHT_NORMAL,   # Font weight
+                        False,                  # Underlined
+                        opts[9]                 # Face name
+            )
+            self.text2.SetFont(custom_font2)
 
         # DISABLE View Log if not set to 'on'
         if opts[5] == "off":
@@ -338,9 +375,25 @@ class MyFrame(wx.Frame):
             self.on_close(event)
         elif modifiers == wx.MOD_CONTROL and keycode == ord('H'):  # Ctrl+F: open search dialog.
             self.on_help_dialog()
+        elif modifiers == wx.MOD_CONTROL and keycode == ord('O'):  # Ctrl+O: open editor with options
+            self.openEditor()
         else:
             event.Skip()  # Ensure other key events are processed
 
+    def openEditor(self):
+        ''' Open text editor to alter options.ini '''
+        global opts
+        p = subprocess.Popen([opts[6], 'options.ini'])
+        p.wait()  # wait until editor closes
+        opts = []
+        opts = iniproc.read("options.ini",'openai',     # 0
+                                           'model',     # 1
+                                           'fontsz1',   # 2
+                                           'fontsz2',   # 3
+                                           'role',      # 4
+                                           'log',       # 5
+                                           'editor')    # 6
+        self.reLaunch()
 
     def doSearchDialog(self):
         # Open a dialog to accept search text.
@@ -407,6 +460,13 @@ class MyFrame(wx.Frame):
             wx.TheClipboard.SetData(wx.TextDataObject(text))
             wx.TheClipboard.Close()
 
+    def reLaunch(self):
+        ''' close and re-open this instance '''
+        wx.MessageBox('App will now close and re-open...')
+        python = sys.executable
+        #self.Destroy()
+        self.on_close(None)
+        os.execl(python, python, *sys.argv)
 
     def on_help_dialog(self):
         msg = '''
@@ -415,6 +475,7 @@ class MyFrame(wx.Frame):
         Ctrl-N     Find next\n
         Ctrl-Q     Quit App\n
         Ctrl-G     Execute AI request\n
+        Ctrl-O     Open options in editor\n
         Alt-Ctrl-C
                    Copy Code in Markup\n
         '''
