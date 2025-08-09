@@ -208,4 +208,6 @@ __marimo__/
 __*
 log.md
 winfo
-exported.html
+*.html
+bkup_*
+speech.mp3

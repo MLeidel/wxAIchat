@@ -3,6 +3,9 @@
 # wxPython GUI with OpenAI API in chat mode`
 # ML Aug 2025
 #
+# Requires an OpenAI registration 'key'
+# Uses 'mpv' for voice playback on Linux
+#
 import os
 import sys
 import iniproc
@@ -11,11 +14,12 @@ import webbrowser
 import wx
 import platform
 import subprocess
+import openvoc
 from time import localtime, strftime
 from openai import OpenAI
 
 opts = [] # loading options from the options.ini file into a list
-opts = iniproc.read("options.ini",'openai',     # 0
+opts = iniproc.read("options.ini", 'openai',    # 0
                                    'model',     # 1
                                    'fontsz1',   # 2
                                    'fontsz2',   # 3
@@ -24,24 +28,31 @@ opts = iniproc.read("options.ini",'openai',     # 0
                                    'editor',    # 6
                                    'qheight',   # 7
                                    'font1',     # 8
-                                   'font2')     # 9
+                                   'font2',     # 9
+                                   'voice')     # 10
 intro = f'''
 Welcome to wxAIchat
-    a simple editable GUI desktop GptChat (API) app
+    a GUI desktop AI client for conversing with
+    OpenAI's Large Language Models
 
 Model: {opts[1]}
 role: {opts[4]}
-log: {opts[5]}
-font1: {opts[2]}
-font2: {opts[3]}
-editor: {opts[6]}
-qheight: {opts[7]}
 OpenAI Key: {opts[0]}
+log: {opts[5]}
+qheight: {opts[7]}
+editor: {opts[6]}
+voice: {opts[10]}
+font1: {opts[8]}
+f1 size: {opts[2]}
+font2: {opts[9]}
+f2 size: {opts[3]}
 
 A registered OpenAI API key is required
 and set as a system environment variable
 
 wxpython and openai modules also required
+
+Use Ctrl-H for list of keyboard commands
 '''
 
 class MyFrame(wx.Frame):
@@ -50,6 +61,7 @@ class MyFrame(wx.Frame):
 
         panel = wx.Panel(self)
         sizer = wx.GridBagSizer(5, 5)
+        self.playback = False
 
         # ----------------------------
         # First Text Widget (text1) the Prompt area
@@ -333,19 +345,14 @@ class MyFrame(wx.Frame):
                     fout.write(f"{role.upper()}:\n{msg['content']}\n\n")
                 fout.write("="*40 + "\n\n")
 
-        # clear the input box
+        # clear the input query box
         self.text1.SetValue("")
+        # Speak response, if speach is on ...
+        if self.playback is True:
+            self.speak_text(ai_text)
+
 
     def gptCode(self, key: str, model: str, messages: str) -> str:
-        ''' method to access OpenAI chat.completions API '''
-        # try:
-        #     client = OpenAI(
-        #     api_key = os.environ.get(key)  # openai API
-        # )
-        # except Exception as e:
-        #     wx.MessageBox(str(e), 'Info', wx.OK | wx.ICON_ERROR)
-        #     return ""
-
         """Call the OpenAI ChatCompletion endpoint."""
         try:
             client = OpenAI(api_key=os.environ.get(key))
@@ -357,6 +364,35 @@ class MyFrame(wx.Frame):
             wx.MessageBox(str(e), "Error", wx.OK | wx.ICON_ERROR)
             return ""
 
+    def speak_text(self, text: str):
+        ''' Speak the query response text '''
+        # text = self.getmdtext()  # get selected or all text
+        x = openvoc.textospeech(opts[10], 'speek.mp3', text)
+        if x != 0:
+            messagebox.showerror("OpenVOC Error",
+                                 "There is a problem with the voice playback")
+
+    def toggle_speak_text(self, e=None):
+        ''' toggle voice playback of each response
+        Requires mpv for Linux. Nothing for Windows. '''
+        if self.playback == True:
+            self.playback = False
+            # announce it
+            x = openvoc.textospeech(
+                                    opts[10],
+                                    'speek.mp3',
+                                    "Voice playback is now off.")
+        else:
+            self.playback = True
+            # announce it
+            x = openvoc.textospeech(
+                                    opts[10],
+                                    'speek.mp3',
+                                    "Voice playback is now on.")
+        if x != 0:
+            messagebox.showerror("OpenVOC Error",
+                                 "There is a problem with the voice")
+
 
     def on_key_down_hotkeys(self, event):
         ''' Set up HotKeys for the App '''
@@ -365,6 +401,8 @@ class MyFrame(wx.Frame):
 
         if modifiers == (wx.MOD_CONTROL | wx.MOD_ALT) and keycode == ord('C'):  # Ctrl-Alt C on copy code
             self.on_copy_code()
+        elif modifiers == (wx.MOD_CONTROL | wx.MOD_ALT) and keycode == ord('V'):  # toggle voice
+            self.toggle_speak_text()
         elif modifiers == wx.MOD_CONTROL and keycode == ord('F'):  # Ctrl+F: open search dialog.
             self.doSearchDialog()
         elif modifiers == wx.MOD_CONTROL and keycode == ord('N'):  # Ctrl+N: find next occurrence.
@@ -386,13 +424,17 @@ class MyFrame(wx.Frame):
         p = subprocess.Popen([opts[6], 'options.ini'])
         p.wait()  # wait until editor closes
         opts = []
-        opts = iniproc.read("options.ini",'openai',     # 0
+        opts = iniproc.read("options.ini", 'openai',    # 0
                                            'model',     # 1
                                            'fontsz1',   # 2
                                            'fontsz2',   # 3
                                            'role',      # 4
                                            'log',       # 5
-                                           'editor')    # 6
+                                           'editor',    # 6
+                                           'qheight',   # 7
+                                           'font1',     # 8
+                                           'font2',     # 9
+                                           'voice')     # 10
         self.reLaunch()
 
     def doSearchDialog(self):
@@ -476,11 +518,12 @@ class MyFrame(wx.Frame):
         Ctrl-Q     Quit App\n
         Ctrl-G     Execute AI request\n
         Ctrl-O     Open options in editor\n
+        Alt-Ctrl-V Toggle voice
         Alt-Ctrl-C
                    Copy Code in Markup\n
         '''
         #wx.MessageBox(msg)
-        wx.MessageBox(msg, 'Hot Keys' , wx.OK)
+        wx.MessageBox(msg, 'Command Keys' , wx.OK)
 
 
 class MyApp(wx.App):
