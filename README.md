@@ -47,3 +47,10 @@ In addition to python 3.x two other needed modules are:
         
         #   voices: 'alloy','ash','ballad','coral','echo','fable','nova','onyx','sage','shimmer'
 
+---
+
+Window positioning and sizing is remembered for each session.
+
+The upper text control allows for an adjustable height value via the options.ini.
+
+END
